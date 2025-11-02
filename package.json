@@ -4,14 +4,21 @@
   "private": true,
   "main": "dist/server.js",
   "scripts": {
-    "dev": "cross-env NODE_ENV=development ts-node --transpile-only src/server.ts",
+    "dev:speech": "cross-env NODE_ENV=development ts-node --transpile-only src/speech-server.ts",
+    "dev:mcp": "cross-env NODE_ENV=development ts-node --transpile-only src/mcp-server.ts",
     "build": "tsc -p .",
-    "start": "node dist/server.js"
+    "start:speech": "node dist/speech-server.js",
+    "start:mcp": "node dist/mcp-server.js"
   },
   "dependencies": {
     "@google-cloud/speech": "^5.6.0",
     "@google-cloud/text-to-speech": "^4.0.0",
+    "@octokit/rest": "^22.0.1",
+    "@vercel/sdk": "^1.16.1",
     "dotenv": "^17.2.2",
+    "e2b": "^2.6.0",
+    "groq-sdk": "^0.34.0",
+    "jszip": "^3.10.1",
     "ws": "^8.13.0"
   },
   "devDependencies": {
