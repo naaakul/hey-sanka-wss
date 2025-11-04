@@ -1,5 +1,6 @@
 import Groq from "groq-sdk";
 import { SCAFFOLD_SYSTEM_PROMPT } from "../prompts/scaffold-prompt";
+import "dotenv/config";
 
 const groq = new Groq({
   apiKey: process.env.GROQ_API_KEY!,

@@ -10,19 +10,25 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
 
   ws.on("message", async (message) => {
     try {
-      const { command, ...data } = JSON.parse(message.toString());
+      const { command, github_token, vercel_token, ...data } = JSON.parse(
+        message.toString()
+      );
       const lower = command.toLowerCase();
+
+      console.log(lower);
 
       const genMatch = lower.match(
         /(?:create|generate|build)\s+(?:me\s+an?\s+)?([\w\s-]+)\s+app/
       );
-      const pushMatch = lower.match(/\bpush\b/);
+      const pushMatch = lower.match(/\b(?:push|github)\b/);
       const deployMatch = lower.match(/\bdeploy\b/);
 
-      // ───────────── GENERATE ─────────────
+      // ───────────── GEN ─────────────
       if (genMatch) {
         const appName = genMatch[1].trim();
-        ws.send(JSON.stringify({ bot: { mess: `Generating "${appName}" app...` } }));
+        ws.send(
+          JSON.stringify({ bot: { mess: `Generating "${appName}" app...` } })
+        );
 
         const files = await generateApp(appName);
         const zipBuffer = await makeZip(files);
@@ -42,6 +48,7 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
       // ───────────── PUSH ─────────────
       if (pushMatch) {
         ws.send(JSON.stringify({ bot: { mess: "Pushing project to Git..." } }));
+        // const gitLink = await push(name, files, GIT_PAT);
         const gitLink = await push(data);
         ws.send(
           JSON.stringify({
@@ -71,7 +78,9 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
 
       ws.send(JSON.stringify({ bot: { mess: "No valid command found." } }));
     } catch (err: any) {
-      ws.send(JSON.stringify({ bot: { mess: `Error: ${err.message}` } }));
+      ws.send(
+        JSON.stringify({ bot: { mess: `Error from mcp: ${err.message}` } })
+      );
     }
   });
 
