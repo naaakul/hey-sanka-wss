@@ -1,68 +1,98 @@
-// lib/push.ts
-
 import { Octokit } from "@octokit/rest";
+import JSZip from "jszip";
 
 interface File {
   path: string;
   content: string;
 }
 
-export default async ({
-  name,
-  files,
-  GIT_PAT,
-}: {
-  name: string;
-  files: File[];
-  GIT_PAT: string;
-}): Promise<string> => {
-  const octokit = new Octokit({ auth: GIT_PAT });
+interface PushData {
+  github_token: string;
+  currApp: {
+    name: string;
+    code: string; // base64 zip
+  };
+}
 
-  // Get the authenticated user
+async function sleep(ms: number) {
+  return new Promise((res) => setTimeout(res, ms));
+}
+
+async function waitForGitReady(octokit: Octokit, username: string, repoName: string) {
+  // retry /git/refs/main up to 8 times
+  for (let i = 0; i < 8; i++) {
+    try {
+      const { data: ref } = await octokit.rest.git.getRef({
+        owner: username,
+        repo: repoName,
+        ref: "heads/main",
+      });
+      return ref.object.sha;
+    } catch (err: any) {
+      if (err.status === 404 || err.status === 409) {
+        console.log(`🕐 waiting for Git backend to init... (${i + 1})`);
+        await sleep(1500);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error("GitHub backend never became ready after retries.");
+}
+
+export default async (data: PushData): Promise<string> => {
+  const { github_token, currApp } = data;
+  const { name, code } = currApp;
+
+  const octokit = new Octokit({ auth: github_token });
+
+  // ───── 1️⃣ Decode zip ─────
+  const zipBuffer = Buffer.from(code, "base64");
+  const zip = await JSZip.loadAsync(zipBuffer);
+
+  const files: File[] = [];
+  await Promise.all(
+    Object.keys(zip.files).map(async (filename) => {
+      const file = zip.files[filename];
+      if (!file.dir) {
+        const content = await file.async("text");
+        files.push({ path: filename, content });
+      }
+    })
+  );
+
+  // ───── 2️⃣ Get username ─────
   const { data: user } = await octokit.rest.users.getAuthenticated();
   const username = user.login;
+  const repoName = name.trim().toLowerCase().replace(/\s+/g, "-");
+  const defaultBranch = "main";
 
-  // 1. Create a new repo
+  // ───── 3️⃣ Create repo (auto_init true = instant usable branch) ─────
   const { data: repo } = await octokit.rest.repos.createForAuthenticatedUser({
-    name,
+    name: repoName,
     private: false,
-    auto_init: false,
+    auto_init: true,
   });
 
   const repoFullName = repo.full_name;
 
-  // 2. Get the default branch (main)
-  const defaultBranch = "master";
+  // ───── 4️⃣ Wait until backend is ready (if slow) ─────
+  const baseCommitSha = await waitForGitReady(octokit, username, repoName);
 
-  // 3. Create a new commit tree
-  const { data: baseCommit } = await octokit.rest.git.getRef({
+  // ───── 5️⃣ Get base tree sha ─────
+  const { data: baseCommit } = await octokit.rest.git.getCommit({
     owner: username,
-    repo: name,
-    ref: `heads/${defaultBranch}`,
-  }).catch(async () => {
-    // if no branch, create an empty one
-    const { data: emptyCommit } = await octokit.rest.git.createCommit({
-      owner: username,
-      repo: name,
-      message: "Initial commit",
-      tree: "",
-      parents: [],
-    });
-    await octokit.rest.git.createRef({
-      owner: username,
-      repo: name,
-      ref: `refs/heads/${defaultBranch}`,
-      sha: emptyCommit.sha,
-    });
-    return { data: { object: { sha: emptyCommit.sha } } };
+    repo: repoName,
+    commit_sha: baseCommitSha,
   });
+  const baseTreeSha = baseCommit.tree.sha;
 
-  // 4. Create blobs for each file
+  // ───── 6️⃣ Create blobs for all files ─────
   const blobs = await Promise.all(
     files.map(async (file) => {
       const blob = await octokit.rest.git.createBlob({
         owner: username,
-        repo: name,
+        repo: repoName,
         content: file.content,
         encoding: "utf-8",
       });
@@ -70,11 +100,11 @@ export default async ({
     })
   );
 
-  // 5. Create a new tree
-  const { data: tree } = await octokit.rest.git.createTree({
+  // ───── 7️⃣ Create a new tree ─────
+  const { data: newTree } = await octokit.rest.git.createTree({
     owner: username,
-    repo: name,
-    base_tree: baseCommit.object.sha,
+    repo: repoName,
+    base_tree: baseTreeSha,
     tree: blobs.map((b) => ({
       path: b.path,
       mode: "100644",
@@ -83,24 +113,24 @@ export default async ({
     })),
   });
 
-  // 6. Create a commit
-  const { data: commit } = await octokit.rest.git.createCommit({
+  // ───── 8️⃣ Create a commit for new files ─────
+  const { data: newCommit } = await octokit.rest.git.createCommit({
     owner: username,
-    repo: name,
+    repo: repoName,
     message: "Initial project push",
-    tree: tree.sha,
-    parents: [baseCommit.object.sha],
+    tree: newTree.sha,
+    parents: [baseCommitSha],
   });
 
-  // 7. Update the ref to point to new commit
+  // ───── 9️⃣ Update main branch ─────
   await octokit.rest.git.updateRef({
     owner: username,
-    repo: name,
+    repo: repoName,
     ref: `heads/${defaultBranch}`,
-    sha: commit.sha,
+    sha: newCommit.sha,
     force: true,
   });
 
-  // 8. Return repo link
+  // ───── 🔟 Done ─────
   return `https://github.com/${repoFullName}`;
-}
+};

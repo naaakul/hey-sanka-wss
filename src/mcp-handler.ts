@@ -8,14 +8,20 @@ import deploy from "./lib/mcp/deploy";
 export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
   console.log("⚡ MCP client connected");
 
+  // ───── session per connection ─────
+  let session: {
+    currApp?: { name: string; code: string };
+    repoFullName?: string; // e.g. "wizzzzzzzard/doing"
+  } = {};
+
   ws.on("message", async (message) => {
     try {
-      const { command, github_token, vercel_token, ...data } = JSON.parse(
+      const { command, github_token, vercel_token } = JSON.parse(
         message.toString()
       );
       const lower = command.toLowerCase();
 
-      console.log(lower);
+      console.log("🧠 Command:", lower);
 
       const genMatch = lower.match(
         /(?:create|generate|build)\s+(?:me\s+an?\s+)?([\w\s-]+)\s+app/
@@ -34,6 +40,9 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
         const zipBuffer = await makeZip(files);
         const zipBase64 = Buffer.from(zipBuffer).toString("base64");
 
+        // store this app in memory for this connection
+        session.currApp = { name: appName, code: zipBase64 };
+
         ws.send(
           JSON.stringify({
             bot: {
@@ -47,9 +56,28 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
 
       // ───────────── PUSH ─────────────
       if (pushMatch) {
+        if (!session.currApp) {
+          ws.send(
+            JSON.stringify({
+              bot: { mess: "No app found to push. Please generate one first." },
+            })
+          );
+          return;
+        }
+
         ws.send(JSON.stringify({ bot: { mess: "Pushing project to Git..." } }));
-        // const gitLink = await push(name, files, GIT_PAT);
-        const gitLink = await push(data);
+
+        const gitLink = await push({
+          github_token,
+          currApp: session.currApp,
+        });
+
+        // 🔥 extract "owner/repo" from link and store it
+        const match = gitLink.match(/github\.com\/([^/]+\/[^/]+)/);
+        if (match) {
+          session.repoFullName = match[1];
+        }
+
         ws.send(
           JSON.stringify({
             bot: {
@@ -63,8 +91,25 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
 
       // ───────────── DEPLOY ─────────────
       if (deployMatch) {
+        if (!session.repoFullName) {
+          ws.send(
+            JSON.stringify({
+              bot: {
+                mess:
+                  "No GitHub repo found. Please push your app before deploying.",
+              },
+            })
+          );
+          return;
+        }
+
         ws.send(JSON.stringify({ bot: { mess: "Deploying project..." } }));
-        const result = await deploy(data);
+
+        const result = await deploy({
+          repoFullName: session.repoFullName,
+          VERCEL_TOKEN: vercel_token,
+        });
+
         ws.send(
           JSON.stringify({
             bot: {
@@ -76,10 +121,11 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
         return;
       }
 
+      // ───────────── FALLBACK ─────────────
       ws.send(JSON.stringify({ bot: { mess: "No valid command found." } }));
     } catch (err: any) {
       ws.send(
-        JSON.stringify({ bot: { mess: `Error from mcp: ${err.message}` } })
+        JSON.stringify({ bot: { mess: `Error from MCP: ${err.message}` } })
       );
     }
   });
