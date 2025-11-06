@@ -1,11 +1,11 @@
 import { Vercel } from "@vercel/sdk";
 
 type DeployOpts = {
-  repoFullName: string;      // e.g. "wizzzzzzzard/doing"
-  VERCEL_TOKEN: string;      // personal access token
-  branch?: string;           // default "main"
-  waitTimeoutMs?: number;    // default 2 minutes
-  pollIntervalMs?: number;   // default 3 seconds
+  repoFullName: string;
+  VERCEL_TOKEN: string;
+  branch?: string;
+  waitTimeoutMs?: number;
+  pollIntervalMs?: number;
 };
 
 export default async (opts: DeployOpts) => {
@@ -89,16 +89,19 @@ export default async (opts: DeployOpts) => {
   while (true) {
     if (Date.now() - start > waitTimeoutMs) {
       throw new Error(
-        `Timed out waiting for deployment to be READY (waited ${
-          Math.round(waitTimeoutMs / 1000)
-        }s). Current status: ${finalDeployment.status ?? "unknown"}`
+        `Timed out waiting for deployment to be READY (waited ${Math.round(
+          waitTimeoutMs / 1000
+        )}s). Current status: ${finalDeployment.status ?? "unknown"}`
       );
     }
 
     try {
       finalDeployment = await fetchDeployment();
     } catch (err: any) {
-      console.warn("fetchDeployment transient error:", err?.message ?? String(err));
+      console.warn(
+        "fetchDeployment transient error:",
+        err?.message ?? String(err)
+      );
       await new Promise((r) => setTimeout(r, pollIntervalMs));
       continue;
     }

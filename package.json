@@ -17,12 +17,15 @@
     "@vercel/sdk": "^1.16.1",
     "dotenv": "^17.2.2",
     "e2b": "^2.6.0",
+    "fast-glob": "^3.3.3",
+    "fs-extra": "^11.3.2",
     "groq-sdk": "^0.34.0",
     "jszip": "^3.10.1",
     "ws": "^8.13.0"
   },
   "devDependencies": {
     "@types/duplexify": "^3.6.4",
+    "@types/fs-extra": "^11.0.4",
     "@types/glob": "^8.1.0",
     "@types/node": "^20.0.0",
     "@types/pumpify": "^1.4.4",

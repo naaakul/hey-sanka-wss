@@ -11,7 +11,7 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
   // ───── session per connection ─────
   let session: {
     currApp?: { name: string; code: string };
-    repoFullName?: string; // e.g. "wizzzzzzzard/doing"
+    repoFullName?: string; 
   } = {};
 
   ws.on("message", async (message) => {
@@ -21,7 +21,7 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
       );
       const lower = command.toLowerCase();
 
-      console.log("🧠 Command:", lower);
+      console.log("Command:", lower);
 
       const genMatch = lower.match(
         /(?:create|generate|build)\s+(?:me\s+an?\s+)?([\w\s-]+)\s+app/
@@ -40,7 +40,6 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
         const zipBuffer = await makeZip(files);
         const zipBase64 = Buffer.from(zipBuffer).toString("base64");
 
-        // store this app in memory for this connection
         session.currApp = { name: appName, code: zipBase64 };
 
         ws.send(
@@ -72,7 +71,6 @@ export async function handleMcpConnection(ws: WebSocket, req: IncomingMessage) {
           currApp: session.currApp,
         });
 
-        // 🔥 extract "owner/repo" from link and store it
         const match = gitLink.match(/github\.com\/([^/]+\/[^/]+)/);
         if (match) {
           session.repoFullName = match[1];
