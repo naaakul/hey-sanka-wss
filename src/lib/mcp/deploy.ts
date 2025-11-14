@@ -109,10 +109,11 @@ export default async (opts: DeployOpts) => {
     const status = (finalDeployment.status ?? "").toUpperCase();
 
     if (status === "READY") {
-      const url =
-        finalDeployment.url ??
+      let url =
         finalDeployment.aliasFinal ??
-        (finalDeployment.alias && finalDeployment.alias[0]);
+        finalDeployment.alias?.[0] ??
+        finalDeployment.url;
+
       console.log(`✅ Vercel deploy READY at: https://${url}`);
       return {
         success: true,

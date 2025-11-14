@@ -5,7 +5,7 @@ import { handleConnection } from "./wss-handler";
 
 dotenv.config();
 
-const PORT = Number(process.env.WSS_PORT || 8080);
+const PORT = Number(process.env.WSS_PORT || 8082);
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "http://localhost:3000")
   .split(",")
   .map((s) => s.trim());
